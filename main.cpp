@@ -1,3 +1,5 @@
+// g++ -std=c++11 main.cpp -o main.o `pkg-config --cflags --libs opencv` -lpthread
+
 //OpenCV
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
@@ -177,12 +179,14 @@ int main(int argc, char ** argv)
 
 void* runEvents(void* thread_id)
 {
+	time_t timeropen,timernow;
+	time (&timernow);
+	time (&timeropen);
 	
-	
-	string command = "mkdir -p imagens/";
+	string command = "mkdir -p videos/";
 	system(command.c_str());
 	command.clear();
-	string folder = "imagens";
+	string folder = "videos";
 
 	//=== System Variables ===
 	Mat frame;
@@ -203,6 +207,8 @@ void* runEvents(void* thread_id)
 	cvtColor(before, before, CV_RGB2GRAY);
 	medianBlur(before,before,3);
 	vw  = LCTEventVideoWriter(before.rows, before.cols, 3, fps,folder);
+
+
 	while(true)
 	{
 		if(cap.read(frame))
@@ -216,7 +222,7 @@ void* runEvents(void* thread_id)
 			{
 					for(int x=0;x<sub.cols;x++)
 					{
-								if(sub.at<uchar>(y,x)>10)
+								if(sub.at<uchar>(y,x)>3)
 								{
 									sub.at<uchar>(y,x) = 255;
 								}
@@ -229,18 +235,22 @@ void* runEvents(void* thread_id)
 			float dif =  float(countNonZero(sub))/float(sub.cols*sub.rows);
 
 			imshow("frame",frame);
+			//imshow("sub",sub);
 			waitKey(1);
+		
 
-			if( dif > 0.01 )
+			time (&timernow);
+			if( dif > 0.0001 )
 			{
 				event = 0;
-	
+				time (&timeropen);
 			}
-			else
+			else if( difftime(timernow, timeropen) > 10 )
 			{
 				event = 1;
 			}	
-			printf("%d\n",event);
+			printf("%f\n",float(difftime(timernow, timeropen)));
+			
 			vw.runEventVideoWriterDateTime(event, frame);
 			now.copyTo(before);
 		}
