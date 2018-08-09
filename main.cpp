@@ -89,9 +89,9 @@ void* runEvents(void* thread_id)
 
 	//=== Runing Application ===
 	Mat before,now,sub;
-	VideoCapture cap(sysid);
-	Mat element = getStructuringElement( MORPH_RECT, Size( 3, 3 ),Point( -1,-1 ) );	
-	
+	VideoCapture cap("rtsp://admin:pvllck@10.110.1.56:554/cam/realmonitor?channel=1&subtype=1"); //sysid.c_str());
+
+	Mat element = getStructuringElement( MORPH_RECT, Size( 3, 3 ),Point( -1,-1 ) );
 	cap.read(before);
 	cvtColor(before, before, CV_RGB2GRAY);
 	medianBlur(before,before,3);
