@@ -27,11 +27,110 @@
 using namespace std;
 using namespace cv;
 
-// "rtsp://admin:pvllck@10.110.1.56:554/cam/realmonitor?channel=1&subtype=1"
+class LCTEventVideoWriter
+{
+	private:
+		VideoWriter vid;
+		int prevEvent;
+		int ifIsSaving;
+		vector<Mat> prev;
+		struct tm *T;
+		char videoname[300];
+		int nCarryFrames, fps;
+		string pathFolder;
+		int nrows;
+		int ncols;
+		
+	public:
+		LCTEventVideoWriter();
+		LCTEventVideoWriter(int rows,int cols,int ncarryframes,int _fps,string path);
+		void runEventVideoWriterDateTime(int _event, Mat frame);
+		void runEventVideoWriterCounter(int _event, Mat frame);
+		void runEventVideoWriterDateTime(int _event, Mat frame, int sysfps);
+		void runEventVideoWriterDateTime(int _event, Mat frame, int sysfps, int id_db);
+};
 
-//Prototypes
+//==== public ====
+LCTEventVideoWriter::LCTEventVideoWriter(){ // @suppress("Class members should be properly initialized")
+}
+
+LCTEventVideoWriter::LCTEventVideoWriter(int rows,int cols,int ncarryframes,int _fps,string path){ // @suppress("Class members should be properly initialized")
+	nrows = rows;
+	ncols = cols;
+	nCarryFrames = ncarryframes;
+	fps = _fps;
+	pathFolder = path;
+
+	ifIsSaving = 0;
+	prevEvent = -1;
+}
+
+void LCTEventVideoWriter::runEventVideoWriterDateTime(int _event, Mat frame)
+{
+	if(frame.rows!=nrows || frame.cols!=ncols){return ;}
+
+	// Update Carry Frame
+	if(prev.empty())
+	{
+		prev = vector<Mat> (nCarryFrames);
+	}
+	for(int i=0;i<int(prev.size())-1;i++)
+	{
+		prev[i+1].copyTo(prev[i]);
+	}
+	frame.copyTo(prev[prev.size()-1]);
+
+	// Verify write process
+	if( prevEvent == -1 )
+	{
+		prevEvent = _event;
+	}
+	else if( ifIsSaving > 0 )
+	{
+		if( ifIsSaving < nCarryFrames && _event==1 )
+		{
+			vid.write(frame);
+			ifIsSaving++;
+			// significa q ainda falta salvar frames do final...
+			// porem se ja mudou para status de aberto deve dar release
+		}
+		else
+		{
+			vid.release();
+			ifIsSaving = 0;
+		}
+	}
+	else if( ifIsSaving == 0 )
+	{
+		if( prevEvent==1  && _event==0 )
+		{
+			time_t my_time;
+			time (&my_time);
+			T = localtime (&my_time);
+
+			sprintf(videoname,"%s/(%d_%d_%d)_(%dh_%dmin_%ds).avi",pathFolder.c_str(),T->tm_year+1900,T->tm_mon+1,T->tm_mday,T->tm_hour,T->tm_min,T->tm_sec);
+			vid.open(videoname,CV_FOURCC('M','J','P','G'),fps,frame.size(),true);
+
+			for(int i=0; i<int(prev.size()); i++)
+			{
+				vid.write( prev[i] );
+			}
+		}
+		else if( prevEvent==0 && _event==0 )
+		{
+			vid.write(frame);
+		}
+		else if( prevEvent==0  && _event==1 )
+		{
+			vid.write(frame);
+			ifIsSaving = 1;
+		}
+		prevEvent = _event;
+	}
+}
+
+//Prototype
 void* runEvents(void* thread_id);
-
 int main(int argc, char ** argv)
 {
 	//=== Arguments ===
@@ -74,12 +173,17 @@ int main(int argc, char ** argv)
 	return 0;
 }
 
-//string command = "mkdir -p imagens/" + to_string(id) + to_string(id) + "_" + to_string(cam);
-//system(command.c_str());
-//command.clear();
+// "rtsp://admin:pvllck@10.110.1.56:554/cam/realmonitor?channel=1&subtype=1"
 
 void* runEvents(void* thread_id)
 {
+	
+	
+	string command = "mkdir -p imagens/";
+	system(command.c_str());
+	command.clear();
+	string folder = "imagens";
+
 	//=== System Variables ===
 	Mat frame;
 	string *t_id;
@@ -88,13 +192,17 @@ void* runEvents(void* thread_id)
 	string sysid = *t_id;
 
 	//=== Runing Application ===
+	int fps = 10;
+	int event = 1;
 	Mat before,now,sub;
+	LCTEventVideoWriter vw;
 	VideoCapture cap("rtsp://admin:pvllck@10.110.1.56:554/cam/realmonitor?channel=1&subtype=1"); //sysid.c_str());
 
 	Mat element = getStructuringElement( MORPH_RECT, Size( 3, 3 ),Point( -1,-1 ) );
 	cap.read(before);
 	cvtColor(before, before, CV_RGB2GRAY);
 	medianBlur(before,before,3);
+	vw  = LCTEventVideoWriter(before.rows, before.cols, 3, fps,folder);
 	while(true)
 	{
 		if(cap.read(frame))
@@ -125,9 +233,15 @@ void* runEvents(void* thread_id)
 
 			if( dif > 0.01 )
 			{
-				// save
+				event = 0;
+	
 			}
-
+			else
+			{
+				event = 1;
+			}	
+			printf("%d\n",event);
+			vw.runEventVideoWriterDateTime(event, frame);
 			now.copyTo(before);
 		}
 	}
